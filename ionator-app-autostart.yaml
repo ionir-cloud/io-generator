@@ -1,0 +1,114 @@
+# Create ionir-block-16k storage class
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ionir-block-16k
+provisioner: ionir
+volumeBindingMode: Immediate
+reclaimPolicy: Delete
+parameters:
+  type: block
+  blockSize: "16k"
+
+---
+# Create the ionator StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ionator-app
+  labels:
+    app: ionator-app
+    app.kubernetes.io/type: ionir-app
+spec:
+  replicas: 1
+  podManagementPolicy: "Parallel"
+  selector:
+    matchLabels:
+      app: ionator-app
+  serviceName: ionator-service
+  template:
+    metadata:
+      labels:
+        app: ionator-app
+        app.kubernetes.io/type: ionir-app
+    spec:
+      containers:
+        - name: ionator-app
+          image: quay.io/ionir/ionator
+          imagePullPolicy: Always
+          env:
+            - name: FIO_MEDIA_PERCENT_TO_USE    # The offset range to use from the media - 20 is the first 20%, 100 is the entire device - offset wise
+              value: "20"
+            - name: FIO_READ_PERCENT            # How much from the FIO_TOTAL_IO_TO_PERFORM should be read operations
+              value: "40"
+            - name: FIO_WRITE_PERCENT           # How much from the FIO_TOTAL_IO_TO_PERFORM should be write operations
+              value: "60"
+            - name: FIO_TOTAL_IO_TO_PERFORM     # Total amount of IO to perform regardless of media size (will be splitted according to write and read percent above)
+              value: "1024G"
+            - name: FIO_IO_DEPTH                # How many concurrent in-flight IO's are permitted - default 8
+              value: "8"
+            - name: FIO_IO_BLOCK_SIZE           # Block size to perform IO - usually 4K, 16K, 32K, etc
+              value: "16k"
+            - name: FIO_IO_MODE                 # could be set for 'randrw' for random or 'rw' ro sequential IO
+              value: "randrw"
+          command: ["/bin/bash"]
+          args: [ "-c", "count=1 ;
+          echo -e \"--> $(date) [ionator]:] Starting FIO loop with the below params:\" ;
+          echo FIO_MEDIA_PERCENT_TO_USE: $FIO_MEDIA_PERCENT_TO_USE ;
+          echo FIO_READ_PERCENT: $FIO_READ_PERCENT ;
+          echo FIO_WRITE_PERCENT: $FIO_WRITE_PERCENT ;
+          echo FIO_TOTAL_IO_TO_PERFORM: $FIO_TOTAL_IO_TO_PERFORM ;
+          echo FIO_IO_DEPTH: $FIO_IO_DEPTH ;
+          echo FIO_IO_BLOCK_SIZE: $FIO_IO_BLOCK_SIZE ;
+          echo FIO_IO_MODE: $FIO_IO_MODE ;
+          echo  ;
+          while true ; do echo -e \"--> $(date) [ionator]:] Starting iteration ${count}:\" ;
+          fio 
+          --ioengine=libaio 
+          --name=running_IO 
+          --readwrite=${FIO_IO_MODE}
+          --numjobs=1 
+          --rwmixread=${FIO_READ_PERCENT}
+          --rwmixwrite=${FIO_WRITE_PERCENT}
+          --group_reporting 
+          --direct=1 
+          --buffer_compress_percentage=0 
+          --scramble_buffers=1 
+          --dedupe_percentage=66 
+          --io_size=${FIO_TOTAL_IO_TO_PERFORM}
+          --size=${FIO_MEDIA_PERCENT_TO_USE}%
+          --randrepeat=0 
+          --blocksize=${FIO_IO_BLOCK_SIZE}
+          --iodepth=${FIO_IO_DEPTH}
+          --filename=/media/reduxio ; 
+          echo -e \"\nAbout to sleep 180 sec before next iteration\n\" ;
+          sleep 180 ; 
+          count=$((count+1)) ; 
+          done" ]
+          volumeDevices:
+            - name: ionator-app-volume
+              devicePath: /media/reduxio
+      imagePullSecrets:
+        - name: ionir-k8s-pull-secret
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - ionator
+              topologyKey: "kubernetes.io/hostname"
+  volumeClaimTemplates:
+    - metadata:
+        name: ionator-app-volume
+      spec:
+        storageClassName: ionir-block-16k
+        accessModes: [ "ReadWriteOnce" ]
+        volumeMode: Block
+        resources:
+          requests:
+            storage: 2000Gi # If you want a bigger volume size change it here (just make sure you create an appropriate volume)
