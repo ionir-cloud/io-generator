@@ -2,13 +2,13 @@
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
-  name: ionir-block-16k
+  name: ionir-block-4k
 provisioner: ionir
 volumeBindingMode: Immediate
 reclaimPolicy: Delete
 parameters:
   type: block
-  blockSize: "16k"
+  blockSize: "4k"
 
 ---
 # Create the ionator StatefulSet
@@ -44,11 +44,11 @@ spec:
             - name: FIO_WRITE_PERCENT           # How much from the FIO_TOTAL_IO_TO_PERFORM should be write operations
               value: "30"
             - name: FIO_TOTAL_IO_TO_PERFORM     # Total amount of IO to perform regardless of media size (will be splitted according to write and read percent above)
-              value: "100G"
+              value: "10G"
             - name: FIO_IO_DEPTH                # How many concurrent in-flight IO's are permitted - default 8
               value: "8"
             - name: FIO_IO_BLOCK_SIZE           # Block size to perform IO - usually 4K, 16K, 32K, etc
-              value: "16k"
+              value: "4K"
             - name: FIO_IO_MODE                 # could be set for 'randrw' for random or 'rw' ro sequential IO
               value: "randrw"
           command: ["/bin/bash"]
@@ -62,7 +62,7 @@ spec:
           echo FIO_IO_BLOCK_SIZE: $FIO_IO_BLOCK_SIZE ;
           echo FIO_IO_MODE: $FIO_IO_MODE ;
           echo  ;
-          while true ; do echo -e \"--> $(date) [IONATOR]:] Starting iteration ${count}:\" ;
+          while true ; do echo -e \"--> $(date) [IONATOR]: Starting iteration ${count}:\" ;
           fio 
           --ioengine=libaio 
           --name=running_IO 
@@ -81,8 +81,8 @@ spec:
           --blocksize=${FIO_IO_BLOCK_SIZE}
           --iodepth=${FIO_IO_DEPTH}
           --filename=/media/ionir; 
-          echo -e \"\nAbout to sleep 180 sec before next iteration\n\" ;
-          sleep 180 ; 
+          echo -e \"\nAbout to sleep 120 sec before next iteration\n\" ;
+          sleep 120 ; 
           count=$((count+1)) ; 
           done" ]
           volumeDevices:
