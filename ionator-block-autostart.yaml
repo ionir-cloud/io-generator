@@ -1,4 +1,4 @@
-# Create ionir-block-16k storage class
+# Create ionir-block-4k storage class
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
@@ -104,7 +104,7 @@ spec:
     - metadata:
         name: ionator-app-volume
       spec:
-        storageClassName: ionir-block-16k
+        storageClassName: ionir-block-4k
         accessModes: [ "ReadWriteOnce" ]
         volumeMode: Block
         resources:
